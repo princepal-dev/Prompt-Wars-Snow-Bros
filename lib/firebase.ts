@@ -3,6 +3,25 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, collection, doc, setDoc, getDoc, query, orderBy, limit, getDocs, Timestamp } from "firebase/firestore";
 
+/*
+  FIRESTORE SECURITY RULES (REQUIRED FOR PUBLIC LEADERBOARD):
+  
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /leaderboard/{userId} {
+        // Public read access for the leaderboard
+        allow read: if true;
+        
+        // Write access only for authenticated users modifying their own document
+        allow create, update: if request.auth != null && request.auth.uid == userId;
+        
+        // Optional: Add validation to ensure score doesn't decrease or data is valid
+      }
+    }
+  }
+*/
+
 // Helper to get env vars compatible with your runtime polyfill AND Vite
 const getEnv = (key: string) => {
   // 1. Check runtime injection (index.html or Docker)

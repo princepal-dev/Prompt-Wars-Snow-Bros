@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getLeaderboard, LeaderboardEntry } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,7 +12,9 @@ export const LeaderboardUI: React.FC<Props> = ({ isOpen, onClose }) => {
   const { user, logout } = useAuth();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
+  // Data Fetching
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
@@ -23,16 +25,48 @@ export const LeaderboardUI: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
+  // Focus Management & Keyboard Trap
+  useEffect(() => {
+    if (isOpen) {
+        // Trap focus
+        modalRef.current?.focus();
+        
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-      <div className="w-full max-w-md bg-slate-900 border-2 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)] relative overflow-hidden flex flex-col max-h-[90vh]">
+    <div 
+        className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out] pointer-events-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="leaderboard-title"
+    >
+      <div 
+        ref={modalRef}
+        tabIndex={-1}
+        className="w-full max-w-md bg-slate-900 border-2 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)] relative overflow-hidden flex flex-col max-h-[90vh] outline-none"
+      >
         
         {/* Header */}
         <div className="bg-cyan-900/30 p-4 border-b border-cyan-700 flex justify-between items-center shrink-0">
-          <h2 className="text-xl text-white pixel-font text-cyan-300">GLOBAL RANKING</h2>
-          <button onClick={onClose} className="text-cyan-500 hover:text-white font-bold text-xl">&times;</button>
+          <h2 id="leaderboard-title" className="text-xl text-white pixel-font text-cyan-300">GLOBAL RANKING</h2>
+          <button 
+            onClick={onClose} 
+            className="text-cyan-500 hover:text-white font-bold text-xl p-2 focus:outline-none focus:text-white"
+            aria-label="Close Leaderboard"
+          >
+            &times;
+          </button>
         </div>
 
         {/* User Status Bar */}
@@ -45,7 +79,10 @@ export const LeaderboardUI: React.FC<Props> = ({ isOpen, onClose }) => {
                         <span className="text-sm text-white font-bold truncate max-w-[120px]">{user?.displayName}</span>
                     </div>
                 </div>
-                <button onClick={logout} className="text-[10px] text-red-400 hover:text-red-300 border border-red-900 px-3 py-1 hover:bg-red-900/20 transition-colors">
+                <button 
+                    onClick={logout} 
+                    className="text-[10px] text-red-400 hover:text-red-300 border border-red-900 px-3 py-1 hover:bg-red-900/20 transition-colors focus:ring-1 focus:ring-red-500 outline-none"
+                >
                     LOGOUT
                 </button>
             </div>
@@ -61,7 +98,7 @@ export const LeaderboardUI: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         {/* List */}
-        <div className="p-4 overflow-y-auto crt-scanline flex-1 min-h-0">
+        <div className="p-4 overflow-y-auto crt-scanline flex-1 min-h-0" tabIndex={0}>
           {loading ? (
              <div className="text-center text-cyan-500 py-8 tech-font animate-pulse">FETCHING DATA...</div>
           ) : (
@@ -86,7 +123,7 @@ export const LeaderboardUI: React.FC<Props> = ({ isOpen, onClose }) => {
                         <tr key={entry.uid} className={`tech-font text-sm ${isMe ? 'bg-cyan-900/40 text-white' : 'text-gray-300'} hover:bg-white/5 transition-colors border-b border-white/5 last:border-0`}>
                         <td className="py-3 pl-2 font-bold text-fuchsia-400">#{index + 1}</td>
                         <td className="py-3 flex items-center gap-2">
-                            <img src={entry.photoURL || `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${entry.uid}`} className="w-5 h-5 rounded-full bg-slate-800" />
+                            <img src={entry.photoURL || `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${entry.uid}`} className="w-5 h-5 rounded-full bg-slate-800" alt="" />
                             <span className="truncate max-w-[120px]">{entry.displayName}</span>
                         </td>
                         <td className="py-3 text-right text-gray-500">{entry.highestWave}</td>

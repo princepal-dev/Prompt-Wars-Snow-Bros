@@ -56,6 +56,14 @@ function GameInterface() {
     }
   }, [uiState.gameOver, user]);
 
+  // Handle Canvas Interaction State
+  useEffect(() => {
+     if (canvasRef.current) {
+         // Disable canvas pointer events when leaderboard is open to ensure clicks go to the modal
+         canvasRef.current.style.pointerEvents = showLeaderboard ? 'none' : 'auto';
+     }
+  }, [showLeaderboard]);
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReducedMotion(mediaQuery.matches);
@@ -80,10 +88,6 @@ function GameInterface() {
            return { ...prev, ...data };
         });
       });
-      // Preload Menu Music? 
-      // Ideally GameEngine handles music, but if we want Menu music on THIS screen before start:
-      // engineRef.current.soundManager.playTrack('MENU');
-      // However, browsers block audio until interaction.
     }
 
     return () => {
@@ -138,7 +142,8 @@ function GameInterface() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-black to-black opacity-80" aria-hidden="true"></div>
       )}
       
-      {/* -------------------- HUD LAYER -------------------- */}
+      {/* -------------------- HUD LAYER (z-30) -------------------- */}
+      {/* pointer-events-none allows clicks to pass through to canvas, EXCEPT for interactive children with pointer-events-auto */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-6 flex flex-col justify-between z-30">
         
         {/* Header Bar */}
