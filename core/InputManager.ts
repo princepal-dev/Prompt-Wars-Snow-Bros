@@ -1,10 +1,19 @@
+
 import { InputState } from '../types';
 
 export class InputManager {
   keys: Set<string> = new Set();
   
-  private handleKeyDown = (e: KeyboardEvent) => this.keys.add(e.code);
-  private handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
+  private handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input field (room code, chat, etc)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      this.keys.add(e.code);
+  }
+  
+  private handleKeyUp = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      this.keys.delete(e.code);
+  }
 
   constructor() {
     window.addEventListener('keydown', this.handleKeyDown);

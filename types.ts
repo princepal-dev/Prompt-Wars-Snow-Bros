@@ -22,9 +22,16 @@ export enum BossState {
   SPAWN = 'SPAWN',
   PHASE_1 = 'PHASE_1', // Normal attacks
   PHASE_2 = 'PHASE_2', // Faster, more aggro
+  PHASE_3 = 'PHASE_3', // Blizzard Enraged
   STUNNED = 'STUNNED', // Frozen, waiting to be pushed
   ENRAGED = 'ENRAGED', // Just broke out of ice, very fast
   DEFEATED = 'DEFEATED'
+}
+
+export enum PlayerState {
+  ALIVE = 'ALIVE',
+  GHOST = 'GHOST', // Dead, waiting for revive
+  SPAWNING = 'SPAWNING'
 }
 
 export enum PowerUpType {
@@ -35,6 +42,7 @@ export enum PowerUpType {
 
 export enum GameState {
   MENU = 'MENU',
+  LOBBY = 'LOBBY',
   PLAYING = 'PLAYING',
   GAME_OVER = 'GAME_OVER',
   VICTORY = 'VICTORY'
@@ -66,7 +74,7 @@ export interface Entity {
   health?: number;
   maxHealth?: number;
   freezeLevel?: number; // 0 to 100
-  state?: EnemyState | BossState;
+  state?: EnemyState | BossState | PlayerState | string;
   direction?: number; // 1 or -1
   ttl?: number; // Time to live (projectiles, particles)
   
@@ -83,6 +91,9 @@ export interface Entity {
   // Boss specific
   bossPhaseTimer?: number;
   attackCooldown?: number;
+  
+  // Multiplayer
+  playerId?: string; // Links entity to a user ID
 }
 
 export interface InputState {
@@ -116,4 +127,16 @@ export interface WaveConfig {
   message: string;
   enemyTheme?: EnemyTheme; // AI generated visual theme
   layout?: PlatformConfig[]; // Dynamic level layout
+}
+
+// Network Schemas
+export interface NetworkPacket {
+    t: 'IN' | 'UP' | 'JOIN'; // Type
+    ts?: number; // Timestamp
+    p?: any[]; // Players
+    e?: any[]; // Entities
+    b?: any; // Boss
+    k?: any; // Keys (Input)
+    id?: string; // Client ID
+    room?: string;
 }

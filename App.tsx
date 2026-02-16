@@ -5,6 +5,7 @@ import { EnemyTheme } from './types';
 import { saveScore } from './lib/firebase';
 import { LeaderboardUI } from './components/LeaderboardUI';
 import { LoginScreen } from './components/LoginScreen';
+import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { useAuth } from './context/AuthContext';
 
 export default function App() {
@@ -28,6 +29,7 @@ function GameInterface() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showLobby, setShowLobby] = useState(false);
 
   const [uiState, setUiState] = useState({
     score: 0,
@@ -59,10 +61,11 @@ function GameInterface() {
   // Handle Canvas Interaction State
   useEffect(() => {
      if (canvasRef.current) {
-         // Disable canvas pointer events when leaderboard is open to ensure clicks go to the modal
-         canvasRef.current.style.pointerEvents = showLeaderboard ? 'none' : 'auto';
+         // Disable canvas pointer events when leaderboard OR lobby is open
+         // This ensures clicks fall through to the modal inputs
+         canvasRef.current.style.pointerEvents = (showLeaderboard || showLobby) ? 'none' : 'auto';
      }
-  }, [showLeaderboard]);
+  }, [showLeaderboard, showLobby]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -72,6 +75,9 @@ function GameInterface() {
     mediaQuery.addEventListener('change', handler);
 
     const handleGlobalKey = (e: KeyboardEvent) => {
+        // Prevent toggling audio if user is typing in an input
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
         if (e.code === 'KeyM') {
             engineRef.current?.toggleAudio();
         }
@@ -112,10 +118,11 @@ function GameInterface() {
     };
   }, [uiState.message, hasStarted]);
 
-  const handleStart = () => {
+  const handleStart = (isMultiplayer: boolean = false, roomId: string = "") => {
     if (engineRef.current && !hasStarted) {
-      engineRef.current.start();
+      engineRef.current.start(isMultiplayer, roomId);
       setHasStarted(true);
+      setShowLobby(false);
       setUiState(prev => ({ ...prev, message: "ENTERING LEVEL 1...", lives: 3 }));
       setTimeout(() => canvasRef.current?.focus(), 100);
     }
@@ -143,7 +150,6 @@ function GameInterface() {
       )}
       
       {/* -------------------- HUD LAYER (z-30) -------------------- */}
-      {/* pointer-events-none allows clicks to pass through to canvas, EXCEPT for interactive children with pointer-events-auto */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-6 flex flex-col justify-between z-30">
         
         {/* Header Bar */}
@@ -231,6 +237,13 @@ function GameInterface() {
             onClose={() => setShowLeaderboard(false)} 
         />
 
+        {showLobby && (
+            <MultiplayerLobby 
+                onJoin={(roomId) => handleStart(true, roomId)}
+                onCancel={() => setShowLobby(false)}
+            />
+        )}
+
         {showEnemyIntro && uiState.enemyTheme && !uiState.gameOver && (
            <div className="absolute top-1/4 left-0 w-full flex flex-col items-center justify-center animate-[slideIn_0.5s_ease-out]" aria-live="polite">
                <div className="bg-black/90 border-y-2 border-cyan-400 w-full py-8 backdrop-blur-sm relative overflow-hidden">
@@ -251,7 +264,7 @@ function GameInterface() {
         )}
 
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg text-center pointer-events-auto z-50">
-          {!hasStarted ? (
+          {!hasStarted && !showLobby ? (
             <div className="bg-black/85 border border-cyan-800 p-8 shadow-[0_0_100px_rgba(6,182,212,0.15)] backdrop-blur-md relative">
                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-cyan-500"></div>
                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-cyan-500"></div>
@@ -263,13 +276,21 @@ function GameInterface() {
                    <div className="w-16 h-1 bg-cyan-600 mx-auto"></div>
                </div>
                
-               <button 
-                  onClick={handleStart}
-                  className="group relative px-10 py-4 bg-cyan-600 text-black font-bold tracking-widest hover:bg-white hover:scale-105 transition-all duration-200 clip-path-polygon focus:outline-none focus:ring-4 focus:ring-cyan-400"
-                  aria-label="Start Game"
-               >
-                  <span className="relative pixel-font text-sm">INITIALIZE MISSION</span>
-               </button>
+               <div className="flex flex-col gap-3">
+                   <button 
+                      onClick={() => handleStart(false)}
+                      className="group relative px-10 py-4 bg-cyan-600 text-black font-bold tracking-widest hover:bg-white hover:scale-105 transition-all duration-200 clip-path-polygon focus:outline-none focus:ring-4 focus:ring-cyan-400"
+                   >
+                      <span className="relative pixel-font text-sm">SINGLE PLAYER</span>
+                   </button>
+                   
+                   <button 
+                      onClick={() => setShowLobby(true)}
+                      className="group relative px-10 py-4 bg-transparent border-2 border-emerald-500 text-emerald-400 font-bold tracking-widest hover:bg-emerald-900/30 transition-all duration-200 clip-path-polygon focus:outline-none focus:ring-4 focus:ring-emerald-400"
+                   >
+                      <span className="relative pixel-font text-sm">MULTIPLAYER</span>
+                   </button>
+               </div>
 
                <div className="mt-8 flex justify-center gap-4">
                   <button onClick={toggleMotion} className="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors uppercase tracking-widest focus:text-cyan-400 focus:outline-none">
@@ -277,7 +298,7 @@ function GameInterface() {
                   </button>
                </div>
             </div>
-          ) : (uiState.message && !showEnemyIntro) ? (
+          ) : (uiState.message && !showEnemyIntro && !showLobby) ? (
              <div className="pointer-events-none flex flex-col items-center">
                  <h2 className={`text-2xl md:text-3xl pixel-font mb-4 drop-shadow-md ${uiState.gameOver ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
                    {uiState.message}
