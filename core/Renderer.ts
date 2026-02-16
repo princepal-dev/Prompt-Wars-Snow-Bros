@@ -1,16 +1,16 @@
-import { Entity, EntityType, EnemyState, PowerUpType } from '../types';
+
+import { Entity, EntityType, EnemyState, PowerUpType, BossState } from '../types';
+import { WORLD } from '../utils/constants';
 
 export class Renderer {
   
   static drawEntity(ctx: CanvasRenderingContext2D, e: Entity) {
     ctx.save();
     // Translate to entity position
-    // We assume e.pos is top-left, so we might want to center operations relative to it
     ctx.translate(Math.floor(e.pos.x), Math.floor(e.pos.y));
 
-    // Handle direction flipping for sprites
-    // We assume default sprite faces RIGHT (direction = 1)
-    if (e.direction === -1) {
+    // Handle direction flipping
+    if ((e.type === EntityType.PLAYER || e.type === EntityType.ENEMY || e.type === EntityType.BOSS) && e.direction === -1) {
        ctx.translate(e.size.x, 0);
        ctx.scale(-1, 1);
     }
@@ -23,17 +23,17 @@ export class Renderer {
         case EntityType.ENEMY:
             Renderer.drawEnemy(ctx, e);
             break;
+        case EntityType.BOSS:
+            Renderer.drawBoss(ctx, e);
+            break;
         case EntityType.SNOWBALL:
             Renderer.drawSnowball(ctx, e);
             break;
         case EntityType.PLATFORM:
-        case EntityType.WALL:
-            // Cancel flip for static objects if somehow they have direction -1
-            if (e.direction === -1) {
-                 ctx.scale(-1, 1);
-                 ctx.translate(-e.size.x, 0);
-            }
             Renderer.drawPlatform(ctx, e);
+            break;
+        case EntityType.WALL:
+            Renderer.drawWall(ctx, e);
             break;
         case EntityType.PROJECTILE:
             Renderer.drawProjectile(ctx, e);
@@ -45,9 +45,66 @@ export class Renderer {
             }
             Renderer.drawPowerUp(ctx, e);
             break;
+        case EntityType.PARTICLE:
+            Renderer.drawParticle(ctx, e);
+            break;
     }
 
     ctx.restore();
+  }
+
+  static drawBoss(ctx: CanvasRenderingContext2D, e: Entity) {
+      // Big Boss (64x64)
+      const pulse = Math.sin(Date.now() / 200) * 2;
+      
+      // Aura
+      ctx.shadowColor = e.state === BossState.STUNNED ? '#a5f3fc' : '#ef4444';
+      ctx.shadowBlur = 20;
+      
+      // Body
+      ctx.fillStyle = e.state === BossState.STUNNED ? '#a5f3fc' : '#450a0a';
+      ctx.fillRect(8, 8, 48, 48);
+      ctx.shadowBlur = 0;
+
+      // Armor / Details
+      ctx.fillStyle = e.color; 
+      ctx.fillRect(4, 4 - pulse, 16, 20); // Shoulder Left
+      ctx.fillRect(44, 4 - pulse, 16, 20); // Shoulder Right
+      
+      // Face
+      ctx.fillStyle = '#000';
+      ctx.fillRect(20, 20, 24, 16);
+      
+      // Eyes
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(24, 24, 6, 4);
+      ctx.fillRect(34, 24, 6, 4);
+      
+      // Frozen Overlay
+      if (e.state !== BossState.STUNNED && e.freezeLevel && e.freezeLevel > 0) {
+           ctx.fillStyle = `rgba(165, 243, 252, ${e.freezeLevel / 150})`; // Less opacity than normal
+           ctx.fillRect(0, 0, 64, 64);
+      }
+      
+      if (e.state === BossState.STUNNED) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(0,0, 64, 64);
+          
+          // "PUSH ME" indicator (handled in UI ideally, but draw here for simplicity)
+          ctx.font = '10px monospace';
+          ctx.fillStyle = '#fff';
+          ctx.fillText("PUSH!", 20, -10);
+      }
+  }
+
+  static drawParticle(ctx: CanvasRenderingContext2D, e: Entity) {
+      if (!e.ttl) return;
+      const opacity = e.ttl / 30; // Fade out based on TTL
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = e.color;
+      ctx.fillRect(0, 0, e.size.x, e.size.y);
+      ctx.globalAlpha = 1.0;
   }
 
   static drawPlayer(ctx: CanvasRenderingContext2D, e: Entity) {
@@ -129,7 +186,7 @@ export class Renderer {
   }
 
   static drawEnemy(ctx: CanvasRenderingContext2D, e: Entity) {
-      // Red Demon (32x32)
+      // Dynamic Enemy (32x32)
       
       const bounce = Math.abs(Math.sin(Date.now() / 150)) * 2;
       const walkWaddle = Math.sin(Date.now() / 100) * 2;
@@ -140,15 +197,16 @@ export class Renderer {
       ctx.ellipse(16, 30, 8, 3, 0, 0, Math.PI*2);
       ctx.fill();
 
-      // Main Body
-      ctx.fillStyle = e.state === EnemyState.STUNNED ? '#9ca3af' : '#dc2626'; // Greyish if stunned before freezing
+      // Main Body (Use the entity color!)
+      // If stunned, desaturate it a bit
+      ctx.fillStyle = e.state === EnemyState.STUNNED ? '#9ca3af' : e.color; 
       ctx.beginPath();
       // A slightly wide circle for body
       ctx.ellipse(16, 16 - bounce, 12 + (walkWaddle*0.5), 12 - (walkWaddle*0.5), 0, 0, Math.PI * 2);
       ctx.fill();
       
       // Horns
-      ctx.fillStyle = '#fcd34d'; // Yellow
+      ctx.fillStyle = '#ffffff'; // White horns look good on most colors
       ctx.beginPath();
       ctx.moveTo(10, 8 - bounce);
       ctx.lineTo(6, 0 - bounce);
@@ -162,21 +220,24 @@ export class Renderer {
       ctx.fill();
 
       // Eyes
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#000000';
       ctx.beginPath();
       ctx.ellipse(12, 14 - bounce, 3, 4, 0, 0, Math.PI*2);
       ctx.ellipse(20, 14 - bounce, 3, 4, 0, 0, Math.PI*2);
       ctx.fill();
       
-      // Pupils (Look at player direction if we had access, default left/right)
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.arc(13, 14 - bounce, 1, 0, Math.PI*2);
-      ctx.arc(21, 14 - bounce, 1, 0, Math.PI*2);
-      ctx.fill();
-
-      // Fangs
+      // Glowing Pupils
       ctx.fillStyle = '#fff';
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.arc(12, 14 - bounce, 1, 0, Math.PI*2);
+      ctx.arc(20, 14 - bounce, 1, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Mouth
+      ctx.fillStyle = '#000';
       ctx.beginPath();
       ctx.moveTo(13, 20 - bounce); ctx.lineTo(14, 23 - bounce); ctx.lineTo(15, 20 - bounce);
       ctx.moveTo(17, 20 - bounce); ctx.lineTo(18, 23 - bounce); ctx.lineTo(19, 20 - bounce);
@@ -269,6 +330,31 @@ export class Renderer {
           ctx.lineTo(i-10, 3);
           ctx.fill();
       }
+  }
+
+  static drawWall(ctx: CanvasRenderingContext2D, e: Entity) {
+      // Tech Wall (Vertical)
+      const w = e.size.x;
+      const h = e.size.y;
+
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, w, h);
+
+      // Vertical Hazard Stripes
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      for(let i=0; i < h; i+=40) {
+          ctx.beginPath();
+          ctx.moveTo(0, i);
+          ctx.lineTo(w, i+20);
+          ctx.lineTo(w, i+10);
+          ctx.lineTo(0, i-10);
+          ctx.fill();
+      }
+
+      // Border glow
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, w, h);
   }
   
   static drawProjectile(ctx: CanvasRenderingContext2D, e: Entity) {

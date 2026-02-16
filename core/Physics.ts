@@ -2,16 +2,20 @@ import { Entity, Rect, Vector2, EntityType } from '../types';
 import { PHYSICS, WORLD } from '../utils/constants';
 
 export class Physics {
-  // AABB Collision Detection
-  static checkCollision(a: Rect, b: Rect): boolean {
+  /**
+   * Optimized AABB Collision Detection
+   * Avoids creating new objects for Rects during every check
+   */
+  static checkCollision(e1: Entity, e2: Entity): boolean {
     return (
-      a.x < b.x + b.w &&
-      a.x + a.w > b.x &&
-      a.y < b.y + b.h &&
-      a.y + a.h > b.y
+      e1.pos.x < e2.pos.x + e2.size.x &&
+      e1.pos.x + e1.size.x > e2.pos.x &&
+      e1.pos.y < e2.pos.y + e2.size.y &&
+      e1.pos.y + e1.size.y > e2.pos.y
     );
   }
 
+  // Legacy support if needed, but discouraged in loop
   static getRect(e: Entity): Rect {
     return { x: e.pos.x, y: e.pos.y, w: e.size.x, h: e.size.y };
   }
@@ -28,9 +32,8 @@ export class Physics {
 
   static resolveMapCollisions(entity: Entity, mapObjects: Entity[]) {
     entity.isGrounded = false;
-    const entityRect = Physics.getRect(entity);
-
-    // 1. World Boundaries (Backup)
+    
+    // 1. World Boundaries
     if (entity.pos.x < 0) {
       entity.pos.x = 0;
       entity.vel.x = 0;
@@ -53,13 +56,12 @@ export class Physics {
     }
 
     // 2. Object Collisions (Platforms and Walls)
+    // Optimization: Inline checks instead of calling getRect
     for (const obj of mapObjects) {
-      const objRect = Physics.getRect(obj);
-
-      if (Physics.checkCollision(entityRect, objRect)) {
+      if (Physics.checkCollision(entity, obj)) {
         
         if (obj.type === EntityType.WALL) {
-           Physics.resolveSolidCollision(entity, objRect);
+           Physics.resolveSolidCollision(entity, obj);
         } else if (obj.type === EntityType.PLATFORM) {
            // One-way platform logic
            const prevY = entity.pos.y - entity.vel.y;
@@ -74,19 +76,19 @@ export class Physics {
     }
   }
 
-  static resolveSolidCollision(e: Entity, wall: Rect) {
+  static resolveSolidCollision(e: Entity, wall: Entity) {
     // Find intersection depth
     // Center points
     const eCx = e.pos.x + e.size.x / 2;
     const eCy = e.pos.y + e.size.y / 2;
-    const wCx = wall.x + wall.w / 2;
-    const wCy = wall.y + wall.h / 2;
+    const wCx = wall.pos.x + wall.size.x / 2;
+    const wCy = wall.pos.y + wall.size.y / 2;
 
     const dx = eCx - wCx;
     const dy = eCy - wCy;
 
-    const combinedHalfW = (e.size.x / 2) + (wall.w / 2);
-    const combinedHalfH = (e.size.y / 2) + (wall.h / 2);
+    const combinedHalfW = (e.size.x / 2) + (wall.size.x / 2);
+    const combinedHalfH = (e.size.y / 2) + (wall.size.y / 2);
 
     const overlapX = combinedHalfW - Math.abs(dx);
     const overlapY = combinedHalfH - Math.abs(dy);

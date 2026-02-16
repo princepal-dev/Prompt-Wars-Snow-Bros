@@ -3,9 +3,18 @@ import { InputState } from '../types';
 export class InputManager {
   keys: Set<string> = new Set();
   
+  private handleKeyDown = (e: KeyboardEvent) => this.keys.add(e.code);
+  private handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
+
   constructor() {
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+  }
+
+  cleanup() {
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    this.keys.clear();
   }
 
   getState(): InputState {

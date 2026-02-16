@@ -1,3 +1,4 @@
+
 export enum EntityType {
   PLAYER = 'PLAYER',
   ENEMY = 'ENEMY',
@@ -6,7 +7,8 @@ export enum EntityType {
   SNOWBALL = 'SNOWBALL',
   PARTICLE = 'PARTICLE',
   WALL = 'WALL',
-  POWERUP = 'POWERUP'
+  POWERUP = 'POWERUP',
+  BOSS = 'BOSS'
 }
 
 export enum EnemyState {
@@ -14,6 +16,15 @@ export enum EnemyState {
   STUNNED = 'STUNNED', // Partially frozen
   FROZEN = 'FROZEN',   // Fully frozen, becomes a Snowball entity logic
   DEAD = 'DEAD'
+}
+
+export enum BossState {
+  SPAWN = 'SPAWN',
+  PHASE_1 = 'PHASE_1', // Normal attacks
+  PHASE_2 = 'PHASE_2', // Faster, more aggro
+  STUNNED = 'STUNNED', // Frozen, waiting to be pushed
+  ENRAGED = 'ENRAGED', // Just broke out of ice, very fast
+  DEFEATED = 'DEFEATED'
 }
 
 export enum PowerUpType {
@@ -55,7 +66,7 @@ export interface Entity {
   health?: number;
   maxHealth?: number;
   freezeLevel?: number; // 0 to 100
-  state?: EnemyState;
+  state?: EnemyState | BossState;
   direction?: number; // 1 or -1
   ttl?: number; // Time to live (projectiles, particles)
   
@@ -68,6 +79,10 @@ export interface Entity {
   
   // Snowball specific
   isRolling?: boolean;
+  
+  // Boss specific
+  bossPhaseTimer?: number;
+  attackCooldown?: number;
 }
 
 export interface InputState {
@@ -79,11 +94,26 @@ export interface InputState {
   shoot: boolean;
 }
 
+export interface EnemyTheme {
+  name: string;
+  color: string; // Hex
+  description: string;
+}
+
+export interface PlatformConfig {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface WaveConfig {
   enemyCount: number;
   spawnInterval: number;
   enemySpeed: number;
   aggressiveness: number; // 0.0 to 1.0
-  specialEvent?: 'BLIZZARD' | 'NONE';
+  specialEvent?: 'BLIZZARD' | 'NONE' | 'BOSS';
   message: string;
+  enemyTheme?: EnemyTheme; // AI generated visual theme
+  layout?: PlatformConfig[]; // Dynamic level layout
 }
