@@ -15,35 +15,66 @@ export class NetworkManager {
     onStateUpdate: ((state: any) => void) | null = null;
 
     constructor() {
-        // Placeholder for real URL
-        // this.connect('ws://localhost:3000');
+        // No auto-connect in constructor
     }
 
-    connect(url: string) {
+    /**
+     * Connects to the WebSocket server.
+     * If no URL is provided, it determines the URL based on the current environment.
+     */
+    connect(url?: string) {
         if (this.socket) return;
         
+        let connectionUrl = url;
+
+        if (!connectionUrl) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            
+            // If running on localhost, assume backend is on port 3000
+            // If running in production (Cloud Run), use the same host/port (80/443)
+            if (host === 'localhost' || host === '127.0.0.1') {
+                connectionUrl = 'ws://localhost:3000';
+            } else {
+                // On Cloud Run, the WS server usually runs on the same domain
+                connectionUrl = `${protocol}//${window.location.host}`;
+            }
+        }
+
+        console.log(`[Net] Connecting to: ${connectionUrl}`);
+
         try {
-            this.socket = new WebSocket(url);
+            this.socket = new WebSocket(connectionUrl);
             
             this.socket.onopen = () => {
                 this.isConnected = true;
-                console.log("Connected to Multiplayer Server");
+                console.log("[Net] Connected to Multiplayer Server");
             };
 
             this.socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.t === 'UP') {
-                    if (this.onStateUpdate) this.onStateUpdate(msg);
-                } else if (msg.t === 'ID') {
-                    this.playerId = msg.id;
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.t === 'UP') {
+                        if (this.onStateUpdate) this.onStateUpdate(msg);
+                    } else if (msg.t === 'ID') {
+                        this.playerId = msg.id;
+                    }
+                } catch (err) {
+                    console.error("[Net] Failed to parse message", err);
                 }
             };
             
-            this.socket.onclose = () => {
+            this.socket.onclose = (event) => {
                 this.isConnected = false;
+                console.log(`[Net] Disconnected: Code ${event.code}`);
             };
+
+            this.socket.onerror = (error) => {
+                console.warn("[Net] WebSocket Error - Falling back to offline mode", error);
+            };
+
         } catch (e) {
-            console.warn("Multiplayer server not available, running in offline mode.");
+            console.warn("[Net] Multiplayer server not available, running in offline mode.");
         }
     }
 

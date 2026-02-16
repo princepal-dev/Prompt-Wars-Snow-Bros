@@ -109,19 +109,30 @@ export class GameEngine {
   }
   
   applyLevelLayout(layout?: PlatformConfig[]) {
+      // Filter entities to keep (Players and Floor)
+      // IMPORTANT: Explicitly remove ENEMIES, BOSS, PROJECTILES, SNOWBALLS
       const entitiesToKeep = this.entityManager.entities.filter(e => {
+          if (e.type === EntityType.PLAYER) return true; // Keep players
+          
           if (e.type === EntityType.PLATFORM) {
+              // Keep the main floor
               if (e.pos.y >= WORLD.HEIGHT - WORLD.FLOOR_HEIGHT) return true;
               return false;
           }
-          if (e.type === EntityType.PLAYER) return true; // Keep players
-          return true;
+          
+          if (e.type === EntityType.WALL) return true; // Keep walls
+          
+          // Remove everything else (Enemies, Bosses, Projectiles, Particles, Powerups)
+          return false;
       });
       
       this.entityManager.entities = [];
-      this.entityManager.reset(); 
+      this.entityManager.reset(); // Clear pools/caches
+      
+      // Re-add kept entities
       entitiesToKeep.forEach(e => this.entityManager.addEntity(e));
       
+      // Add new layout platforms
       if (layout) {
           layout.forEach(p => {
               this.entityManager.addEntity(
@@ -129,6 +140,7 @@ export class GameEngine {
               );
           });
       } else {
+          // Default Layout
            const platforms = [
             [100, 400], [500, 400],
             [300, 250],
@@ -141,10 +153,14 @@ export class GameEngine {
           });
       }
 
-      // Reset Players
+      // Reset Players Position for safety
       this.entityManager.getByType(EntityType.PLAYER).forEach(p => {
-          p.pos.y = WORLD.HEIGHT - 100;
-          p.vel.x = 0; p.vel.y = 0;
+          // If player was dead/ghost, maybe revive them or keep them ghost?
+          // For now, keep state but ensure they are on screen
+          if (p.pos.y > WORLD.HEIGHT || p.pos.y < 0) {
+            p.pos.y = WORLD.HEIGHT - 100;
+            p.vel.x = 0; p.vel.y = 0;
+          }
       });
   }
 
@@ -187,7 +203,7 @@ export class GameEngine {
     this.levelCompleteTimer = 0;
     this.onUIUpdate({ message: "CONTACTING AI DIRECTOR..." });
     
-    // FORCE BOSS LEVEL IF LEVEL 5 OR DEBUG
+    // BOSS LEVEL LOGIC (Every 5 levels)
     const isBossLevel = this.wave % 5 === 0;
     this.bossActive = isBossLevel;
 
@@ -200,13 +216,13 @@ export class GameEngine {
     if (isBossLevel) {
         config = {
             enemyCount: 1, 
-            spawnInterval: 9999,
+            spawnInterval: 60, // Fixed: Spawns after 1 second (60 frames)
             enemySpeed: 2,
             aggressiveness: 1,
             specialEvent: 'BOSS',
             message: "WARNING: CLASS 5 TITAN DETECTED",
             enemyTheme: { name: "GLACIAL TITAN", color: "#ef4444", description: "Apex Predator" },
-            layout: [] // Arena Cleared
+            layout: [] // Arena Cleared for Boss Fight
         };
     } else {
         config = await this.director.generateWave(this.wave, {
@@ -245,7 +261,7 @@ export class GameEngine {
     this.roomId = roomId;
     
     if (this.isMultiplayer) {
-        this.networkManager.connect('ws://localhost:3000'); // Mock URL
+        this.networkManager.connect(); // Auto-detect env
         this.networkManager.joinRoom(roomId);
     }
     
@@ -279,6 +295,18 @@ export class GameEngine {
     this.animationFrameId = requestAnimationFrame((t) => this.loop(t));
   }
 
+  spawnBoss() {
+     // Idempotency Check: Don't spawn if already exists
+     const existingBoss = this.entityManager.getByType(EntityType.BOSS);
+     if (existingBoss.length > 0) return;
+
+     const boss = this.entityManager.createBoss(WORLD.WIDTH/2 - 32, -100);
+     this.entityManager.addEntity(boss);
+     this.enemiesSpawned++;
+     this.onUIUpdate({ bossHealth: boss.health, bossMaxHealth: boss.maxHealth });
+     console.log("BOSS ENTITY SPAWNED");
+  }
+
   update(dt: number) {
     const input = this.inputManager.getState();
     if (this.isMultiplayer) {
@@ -291,44 +319,52 @@ export class GameEngine {
     const mapObjects = [...platforms, ...walls];
 
     // --- SPAWNER LOGIC ---
-    if (this.currentWaveConfig && this.enemiesSpawned < this.currentWaveConfig.enemyCount) {
-      this.spawnTimer++;
-      if (this.spawnTimer >= this.currentWaveConfig.spawnInterval) {
-        if (this.currentWaveConfig.specialEvent === 'BOSS') {
-            const boss = this.entityManager.createBoss(WORLD.WIDTH/2 - 32, -100);
-            this.entityManager.addEntity(boss);
-            this.enemiesSpawned++;
-            this.onUIUpdate({ bossHealth: boss.health, bossMaxHealth: boss.maxHealth });
-        } else {
-            const x = Math.random() * (WORLD.WIDTH - 150) + 75; 
-            const y = 50;
-            const color = this.currentWaveConfig.enemyTheme?.color || '#ef4444';
-            const enemy = this.entityManager.createEnemy(x, y, color);
-            enemy.vel.x = (this.currentWaveConfig.enemySpeed) * (Math.random() > 0.5 ? 1 : -1);
-            this.entityManager.addEntity(enemy);
-            this.enemiesSpawned++;
-            this.spawnTimer = 0;
+    if (this.currentWaveConfig) {
+        // FAIL-SAFE: Watchdog for boss level
+        if (this.currentWaveConfig.specialEvent === 'BOSS' && this.enemiesSpawned === 0 && this.spawnTimer > 200) {
+             console.warn("Boss spawn watchdog triggered");
+             this.spawnBoss();
         }
-      }
-    } else {
-        // Win Condition Check
-        const activeEnemies = this.entityManager.getByType(EntityType.ENEMY);
-        const activeSnowballs = this.entityManager.getByType(EntityType.SNOWBALL);
-        const activeBosses = this.entityManager.getByType(EntityType.BOSS);
-        
-        let count = 0;
-        activeEnemies.forEach(e => { if (!e.markedForDeletion) count++; });
-        activeSnowballs.forEach(e => { if (!e.markedForDeletion) count++; });
-        activeBosses.forEach(e => { if (!e.markedForDeletion) count++; });
 
-        if (count === 0 && this.enemiesSpawned >= (this.currentWaveConfig?.enemyCount || 0)) {
-            if (this.levelCompleteTimer === 0) {
-                this.levelCompleteTimer = Date.now();
-                this.onUIUpdate({ message: "LEVEL COMPLETE", bossHealth: null });
-                this.soundManager.playPowerUp(); 
-            } else if (Date.now() - this.levelCompleteTimer > 2000) {
-                this.startWave();
+        if (this.enemiesSpawned < this.currentWaveConfig.enemyCount) {
+            this.spawnTimer++;
+            
+            if (this.spawnTimer >= this.currentWaveConfig.spawnInterval) {
+                if (this.currentWaveConfig.specialEvent === 'BOSS') {
+                    this.spawnBoss();
+                } else {
+                    // Standard Minion Spawn
+                    const x = Math.random() * (WORLD.WIDTH - 150) + 75; 
+                    const y = 50;
+                    const color = this.currentWaveConfig.enemyTheme?.color || '#ef4444';
+                    const enemy = this.entityManager.createEnemy(x, y, color);
+                    enemy.vel.x = (this.currentWaveConfig.enemySpeed) * (Math.random() > 0.5 ? 1 : -1);
+                    this.entityManager.addEntity(enemy);
+                    this.enemiesSpawned++;
+                    this.spawnTimer = 0;
+                }
             }
+        }
+    }
+    
+    // Win Condition Check
+    const activeEnemies = this.entityManager.getByType(EntityType.ENEMY);
+    const activeSnowballs = this.entityManager.getByType(EntityType.SNOWBALL);
+    const activeBosses = this.entityManager.getByType(EntityType.BOSS);
+    
+    // Note: We check enemiesSpawned to ensure we don't win before the first enemy spawns
+    let count = 0;
+    activeEnemies.forEach(e => { if (!e.markedForDeletion) count++; });
+    activeSnowballs.forEach(e => { if (!e.markedForDeletion) count++; });
+    activeBosses.forEach(e => { if (!e.markedForDeletion) count++; });
+
+    if (count === 0 && this.enemiesSpawned >= (this.currentWaveConfig?.enemyCount || 0)) {
+        if (this.levelCompleteTimer === 0) {
+            this.levelCompleteTimer = Date.now();
+            this.onUIUpdate({ message: "LEVEL COMPLETE", bossHealth: null });
+            this.soundManager.playPowerUp(); 
+        } else if (Date.now() - this.levelCompleteTimer > 2000) {
+            this.startWave();
         }
     }
 
@@ -458,6 +494,8 @@ export class GameEngine {
   updateBossAI(boss: Entity, players: Entity[]) {
       // 1. Spawn State
       if (boss.state === BossState.SPAWN) {
+          // Force gravity in spawn state to ensure he lands
+          boss.vel.y += PHYSICS.GRAVITY;
           if (boss.isGrounded) {
               boss.state = BossState.PHASE_1;
               this.shakeTimer = 20;
