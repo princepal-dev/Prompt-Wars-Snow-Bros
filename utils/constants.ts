@@ -1,0 +1,25 @@
+export const PHYSICS = {
+  GRAVITY: 0.5,
+  TERMINAL_VELOCITY: 12,
+  FRICTION: 0.85,
+  AIR_RESISTANCE: 0.98,
+  JUMP_FORCE: -14.5,
+  MOVE_SPEED: 0.8,
+  MAX_SPEED: 6,
+  
+  PROJECTILE_SPEED: 10,
+  SNOWBALL_ROLL_SPEED: 10,
+};
+
+export const WORLD = {
+  WIDTH: 800,
+  HEIGHT: 600,
+  FLOOR_HEIGHT: 40,
+};
+
+export const GAMEPLAY = {
+  FREEZE_PER_SHOT: 34, // 3 shots to freeze
+  FREEZE_DECAY: 0.2,
+  SPAWN_SAFE_RADIUS: 150,
+  MAX_ENEMIES: 20,
+};
